@@ -1,5 +1,32 @@
-*.tsv
-*.zip
-processed_data/
+# Python
 __pycache__/
+*.py[cod]
+*.pyo
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# VS Code
 .vscode/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Challenge datasets
+*.tsv
+*.csv
+*.zip
+
+# DuckDB / databases
+*.duckdb
+*.duckdb.wal
+*.db
+
+# Generated candidate data
+processed_data/
+
+# Temporary files
+*.tmp
+*.log

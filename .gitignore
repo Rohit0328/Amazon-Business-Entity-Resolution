@@ -30,3 +30,19 @@ processed_data/
 # Temporary files
 *.tmp
 *.log
+# Local experiments / analysis
+analyze_*.py
+candidate_population.py
+convert_candidates.py
+diagnose_missed_candidates.py
+evaluate_*.py
+fix_candidate_rows.py
+prepare_*.py
+best_threshold*.txt
+
+# Local model copy
+xgboost_entity_match_model.joblib
+
+# Submission conversion utilities
+submission/code/business_entity_resolution/src/convert_candidates.py
+submission/code/business_entity_resolution/src/fix_candidate_rows.py

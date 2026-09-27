@@ -4,39 +4,27 @@ import os
 import time
 from collections import Counter, defaultdict
 
+
 # ============================================================
 # AMAZON ML CHALLENGE
-# V-FINAL CANDIDATE GENERATION
-# NO DUCKDB / NO SQLITE
+# TEST V-FINAL CANDIDATE GENERATION
+# Same blocker as validated training pipeline
 # ============================================================
 
-S1_FILE = "processed_data/train_source1_processed.tsv"
-S2_FILE = "processed_data/train_source2_processed.tsv"
-S3_FILE = "processed_data/train_source3_processed.tsv"
+BASE = "processed_data"
 
-OUTPUT_FILE = "processed_data/candidate_pairs_final_train.tsv"
+S1_FILE = f"{BASE}/test_source1.tsv"
+S2_FILE = f"{BASE}/test_source2.tsv"
+S3_FILE = f"{BASE}/test_source3.tsv"
 
-# ------------------------------------------------------------
-# SAFETY
-# ------------------------------------------------------------
-# First run only 10,000 S1 records.
-#
-# After validation, change to:
-#
-# VALIDATION_LIMIT = None
-#
-# ------------------------------------------------------------
+OUTPUT_FILE = f"{BASE}/test_candidate_pairs_final.tsv"
 
-VALIDATION_LIMIT = 10000
+# FULL TEST DATA
+VALIDATION_LIMIT = None
 
-# Only tokens appearing in <= this many source records
-# are used as blocking anchors.
 MAX_TOKEN_FREQUENCY = 500
-
-# Number of rare tokens used from each field.
 ANCHORS_PER_FIELD = 4
 
-# Character-signature blocking
 CHAR_SIGNATURE_LENGTH = 5
 MAX_CHAR_SIGNATURE_FREQUENCY = 1000
 
@@ -48,11 +36,6 @@ START = time.time()
 # ============================================================
 
 def normalize_text(value):
-    """
-    Unicode-safe normalization.
-
-    Keeps letters/numbers from non-English languages.
-    """
 
     if value is None:
         return ""
@@ -87,7 +70,7 @@ def unique_tokens(text):
 
 
 def character_signatures(text):
-    """Return bounded character prefix/suffix signatures."""
+
     if not text:
         return []
 
@@ -167,7 +150,7 @@ def read_source(path):
 
 
 # ============================================================
-# SOURCE1 LOADER
+# LOAD TEST SOURCE1
 # ============================================================
 
 def load_source1():
@@ -192,29 +175,16 @@ def load_source1():
 
 
 # ============================================================
-# BUILD TOKEN FREQUENCY
+# TOKEN FREQUENCY
 # ============================================================
 
 def build_token_frequency(path, field_index):
-
-    """
-    First pass over one source.
-
-    field_index:
-        2 = name
-        3 = address
-
-    Returns Counter of:
-        (country, token)
-    """
 
     frequencies = Counter()
 
     count = 0
 
-    print(
-        f"    Building token frequencies..."
-    )
+    print("    Building token frequencies...")
 
     for entity_id, country, name, address in read_source(path):
 
@@ -235,8 +205,7 @@ def build_token_frequency(path, field_index):
         if count % 500000 == 0:
 
             print(
-                f"      processed "
-                f"{count:,} rows"
+                f"      processed {count:,} rows"
             )
 
     print(
@@ -244,34 +213,23 @@ def build_token_frequency(path, field_index):
     )
 
     print(
-        f"    unique tokens : "
-        f"{len(frequencies):,}"
+        f"    unique tokens: {len(frequencies):,}"
     )
 
     return frequencies
 
 
 # ============================================================
-# BUILD EXACT INDEX
+# EXACT INDEX
 # ============================================================
 
 def build_exact_index(path, field_index):
-
-    """
-    Creates:
-
-        (country, normalized_value)
-              ->
-        list of entity IDs
-    """
 
     index = defaultdict(list)
 
     count = 0
 
-    print(
-        "    Building exact index..."
-    )
+    print("    Building exact index...")
 
     for entity_id, country, name, address in read_source(path):
 
@@ -292,20 +250,18 @@ def build_exact_index(path, field_index):
         if count % 500000 == 0:
 
             print(
-                f"      processed "
-                f"{count:,} rows"
+                f"      processed {count:,} rows"
             )
 
     print(
-        f"    exact keys: "
-        f"{len(index):,}"
+        f"    exact keys: {len(index):,}"
     )
 
     return index
 
 
 # ============================================================
-# BUILD RARE TOKEN INDEX
+# RARE TOKEN INDEX
 # ============================================================
 
 def build_rare_token_index(
@@ -313,14 +269,6 @@ def build_rare_token_index(
     field_index,
     frequencies
 ):
-
-    """
-    Only stores tokens whose frequency is <= threshold.
-
-        (country, token)
-              ->
-        list of entity IDs
-    """
 
     index = defaultdict(list)
 
@@ -355,69 +303,107 @@ def build_rare_token_index(
         if count % 500000 == 0:
 
             print(
-                f"      rare-index pass: "
-                f"{count:,} rows"
+                f"      rare-index pass: {count:,} rows"
             )
 
     print(
-        f"    rare token keys: "
-        f"{len(index):,}"
+        f"    rare token keys: {len(index):,}"
     )
 
     return index
 
 
 # ============================================================
-# BUILD CHARACTER SIGNATURE INDEX
+# CHARACTER SIGNATURE INDEX
 # ============================================================
 
 def build_char_signature_index(path, field_index):
-    """Build a bounded character prefix/suffix index."""
 
     frequencies = Counter()
 
-    print("    Building character-signature frequencies...")
+    print(
+        "    Building character-signature frequencies..."
+    )
 
     count = 0
 
     for entity_id, country, name, address in read_source(path):
 
-        text = name if field_index == 2 else address
+        text = (
+            name
+            if field_index == 2
+            else address
+        )
 
-        for signature in set(character_signatures(text)):
+        for signature in set(
+            character_signatures(text)
+        ):
+
             if signature:
-                frequencies[(country, signature)] += 1
+
+                frequencies[
+                    (country, signature)
+                ] += 1
 
         count += 1
 
         if count % 500000 == 0:
-            print(f"      char frequency pass: {count:,} rows")
 
-    print(f"    character signatures: {len(frequencies):,}")
+            print(
+                f"      char frequency pass: {count:,} rows"
+            )
+
+    print(
+        f"    character signatures: "
+        f"{len(frequencies):,}"
+    )
 
     index = defaultdict(list)
 
-    print("    Building character-signature index...")
+    print(
+        "    Building character-signature index..."
+    )
 
     count = 0
 
     for entity_id, country, name, address in read_source(path):
 
-        text = name if field_index == 2 else address
+        text = (
+            name
+            if field_index == 2
+            else address
+        )
 
-        for signature in set(character_signatures(text)):
+        for signature in set(
+            character_signatures(text)
+        ):
 
-            frequency = frequencies.get((country, signature), 0)
+            frequency = frequencies.get(
+                (country, signature),
+                0
+            )
 
-            if 0 < frequency <= MAX_CHAR_SIGNATURE_FREQUENCY:
-                index[(country, signature)].append(entity_id)
+            if (
+                0 < frequency
+                <= MAX_CHAR_SIGNATURE_FREQUENCY
+            ):
+
+                index[
+                    (country, signature)
+                ].append(entity_id)
 
         count += 1
 
         if count % 500000 == 0:
-            print(f"      char index pass: {count:,} rows")
 
-    print(f"    usable character keys: {len(index):,}")
+            print(
+                f"      char index pass: {count:,} rows"
+            )
+
+    print(
+        f"    usable character keys: "
+        f"{len(index):,}"
+    )
 
     del frequencies
     gc.collect()
@@ -426,7 +412,7 @@ def build_char_signature_index(path, field_index):
 
 
 # ============================================================
-# FIND SOURCE1 ANCHORS
+# CHOOSE RARE ANCHORS
 # ============================================================
 
 def choose_anchors(
@@ -474,7 +460,7 @@ def choose_anchors(
 
 
 # ============================================================
-# GENERATE CANDIDATES FOR SOURCE1
+# GENERATE CANDIDATES
 # ============================================================
 
 def generate_for_source(
@@ -485,11 +471,9 @@ def generate_for_source(
 ):
 
     print("\n" + "=" * 80)
-
     print(
         f"PROCESSING {source_name}"
     )
-
     print("=" * 80)
 
     # --------------------------------------------------------
@@ -497,8 +481,7 @@ def generate_for_source(
     # --------------------------------------------------------
 
     print(
-        "\n[1/5] "
-        "Building name token frequencies..."
+        "\n[1/7] Building name token frequencies..."
     )
 
     name_frequency = build_token_frequency(
@@ -511,8 +494,7 @@ def generate_for_source(
     # --------------------------------------------------------
 
     print(
-        "\n[2/5] "
-        "Building address token frequencies..."
+        "\n[2/7] Building address token frequencies..."
     )
 
     address_frequency = build_token_frequency(
@@ -525,8 +507,7 @@ def generate_for_source(
     # --------------------------------------------------------
 
     print(
-        "\n[3/5] "
-        "Building exact name index..."
+        "\n[3/7] Building exact name index..."
     )
 
     exact_name = build_exact_index(
@@ -539,8 +520,7 @@ def generate_for_source(
     # --------------------------------------------------------
 
     print(
-        "\n[4/5] "
-        "Building exact address index..."
+        "\n[4/7] Building exact address index..."
     )
 
     exact_address = build_exact_index(
@@ -549,12 +529,11 @@ def generate_for_source(
     )
 
     # --------------------------------------------------------
-    # RARE TOKEN INDEXES
+    # RARE TOKENS
     # --------------------------------------------------------
 
     print(
-        "\n[5/5] "
-        "Building rare-token indexes..."
+        "\n[5/7] Building rare-token indexes..."
     )
 
     rare_name = build_rare_token_index(
@@ -570,37 +549,47 @@ def generate_for_source(
     )
 
     # --------------------------------------------------------
-    # CHARACTER SIGNATURE INDEXES
+    # CHARACTER SIGNATURES
     # --------------------------------------------------------
 
-    print("\n[6/7] Building character-signature indexes...")
+    print(
+        "\n[6/7] Building character-signature indexes..."
+    )
 
-    char_name = build_char_signature_index(source_path, 2)
-    char_address = build_char_signature_index(source_path, 3)
+    char_name = build_char_signature_index(
+        source_path,
+        2
+    )
+
+    char_address = build_char_signature_index(
+        source_path,
+        3
+    )
 
     print("\nAll indexes ready.")
 
-    print(f"Character names    : {len(char_name):,}")
-    print(f"Character addresses: {len(char_address):,}")
-
     print(
-        f"Exact names    : "
-        f"{len(exact_name):,}"
+        f"Character names    : {len(char_name):,}"
     )
 
     print(
-        f"Exact addresses: "
-        f"{len(exact_address):,}"
+        f"Character addresses: {len(char_address):,}"
     )
 
     print(
-        f"Rare names     : "
-        f"{len(rare_name):,}"
+        f"Exact names        : {len(exact_name):,}"
     )
 
     print(
-        f"Rare addresses : "
-        f"{len(rare_address):,}"
+        f"Exact addresses    : {len(exact_address):,}"
+    )
+
+    print(
+        f"Rare names         : {len(rare_name):,}"
+    )
+
+    print(
+        f"Rare addresses     : {len(rare_address):,}"
     )
 
     # --------------------------------------------------------
@@ -705,10 +694,16 @@ def generate_for_source(
 
         for signature in character_signatures(name):
 
-            ids = char_name.get((country, signature), [])
+            ids = char_name.get(
+                (country, signature),
+                []
+            )
 
             for candidate_id in ids:
-                candidate_rules[candidate_id].add("char_name")
+
+                candidate_rules[
+                    candidate_id
+                ].add("char_name")
 
         # ----------------------------------------------------
         # CHARACTER ADDRESS SIGNATURES
@@ -716,10 +711,16 @@ def generate_for_source(
 
         for signature in character_signatures(address):
 
-            ids = char_address.get((country, signature), [])
+            ids = char_address.get(
+                (country, signature),
+                []
+            )
 
             for candidate_id in ids:
-                candidate_rules[candidate_id].add("char_address")
+
+                candidate_rules[
+                    candidate_id
+                ].add("char_address")
 
         # ----------------------------------------------------
         # WRITE
@@ -766,13 +767,10 @@ def generate_for_source(
 
     del name_frequency
     del address_frequency
-
     del exact_name
     del exact_address
-
     del rare_name
     del rare_address
-
     del char_name
     del char_address
 
@@ -795,41 +793,48 @@ def generate_for_source(
 # ============================================================
 
 print("=" * 80)
-print("AMAZON ML - V-FINAL CANDIDATE GENERATION")
+print(
+    "AMAZON ML - TEST V-FINAL CANDIDATE GENERATION"
+)
 print("=" * 80)
 
 print("\nConfiguration")
-print("----------------------------------------")
+print("-" * 40)
 
 print(
-    f"S1 validation limit : "
-    f"{VALIDATION_LIMIT}"
+    f"S1 validation limit : {VALIDATION_LIMIT}"
 )
 
 print(
-    f"Max token frequency : "
-    f"{MAX_TOKEN_FREQUENCY}"
+    f"Max token frequency : {MAX_TOKEN_FREQUENCY}"
 )
 
 print(
-    f"Anchors per field   : "
-    f"{ANCHORS_PER_FIELD}"
+    f"Anchors per field   : {ANCHORS_PER_FIELD}"
 )
+
+print(
+    f"Char signature size : {CHAR_SIGNATURE_LENGTH}"
+)
+
+print(
+    f"Max char frequency  : "
+    f"{MAX_CHAR_SIGNATURE_FREQUENCY}"
+)
+
 
 # ============================================================
-# LOAD S1 ONLY
+# LOAD TEST SOURCE1
 # ============================================================
 
-print(
-    "\nLoading Source1..."
-)
+print("\nLoading Test Source1...")
 
 s1_rows = load_source1()
 
 print(
-    f"Source1 loaded: "
-    f"{len(s1_rows):,}"
+    f"Source1 loaded: {len(s1_rows):,}"
 )
+
 
 # ============================================================
 # OUTPUT
@@ -902,27 +907,25 @@ elapsed = (
 ) / 60
 
 print("\n" + "=" * 80)
-print("V-FINAL CANDIDATE GENERATION COMPLETE")
+print(
+    "TEST V-FINAL CANDIDATE GENERATION COMPLETE"
+)
 print("=" * 80)
 
 print(
-    f"Source1 records       : "
-    f"{len(s1_rows):,}"
+    f"Source1 records       : {len(s1_rows):,}"
 )
 
 print(
-    f"Source2 candidates    : "
-    f"{s2_candidates:,}"
+    f"Source2 candidates    : {s2_candidates:,}"
 )
 
 print(
-    f"Source3 candidates    : "
-    f"{s3_candidates:,}"
+    f"Source3 candidates    : {s3_candidates:,}"
 )
 
 print(
-    f"TOTAL candidates      : "
-    f"{total:,}"
+    f"TOTAL candidates      : {total:,}"
 )
 
 print(
@@ -931,13 +934,11 @@ print(
 )
 
 print(
-    f"Output                : "
-    f"{OUTPUT_FILE}"
+    f"Output                : {OUTPUT_FILE}"
 )
 
 print(
- n   f"Time                  : "
-    f"{elapsed:.2f} minutes"
+    f"Time                  : {elapsed:.2f} minutes"
 )
 
 print("=" * 80)
